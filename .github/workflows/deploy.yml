@@ -5,9 +5,17 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -21,12 +29,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip list
 
       - name: Build static files
-        run: python build_static.py
+        run: |
+          python build_static.py
+          ls -la static/
+          echo "Contents of static directory:"
+          find static -type f
 
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: static
-          branch: gh-pages 
+          branch: gh-pages
+          clean: true 
