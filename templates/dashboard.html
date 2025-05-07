@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Channel Analytics</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">Telegram Channel Analytics</h1>
+            <a href="/" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Manage QR Codes</a>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- QR Code Scan Statistics -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">QR Code Scan Statistics</h2>
+                
+                <!-- QR Code Selection -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select QR Code</label>
+                    <select id="qrCodeSelect" class="w-full p-2 border rounded" onchange="updateStats()">
+                        <option value="all">All QR Codes</option>
+                    </select>
+                </div>
+
+                <div id="dailyScansChart" class="h-64"></div>
+                <div class="mt-4">
+                    <h3 class="font-semibold">Device Distribution</h3>
+                    <div id="deviceChart" class="h-48"></div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-lg">Total Scans: <span id="totalScans" class="font-bold">0</span></p>
+                </div>
+            </div>
+
+            <!-- Telegram Channel Statistics -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">Channel Statistics</h2>
+                <div id="channelStats" class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold">Channel Name:</span>
+                        <span id="channelName">Loading...</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold">Subscribers:</span>
+                        <span id="subscribers">Loading...</span>
+                    </div>
+                    <div class="mt-4">
+                        <h3 class="font-semibold mb-2">Recent Message Performance</h3>
+                        <div id="messageStats" class="space-y-2">
+                            Loading...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- QR Code Performance Table -->
+        <div class="mt-8 bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">QR Code Performance</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Scans</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Scan</th>
+                        </tr>
+                    </thead>
+                    <tbody id="qrCodeTableBody">
+                        Loading...
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allStats = null;
+
+        // Fetch and update scan statistics
+        async function updateScanStats() {
+            const response = await fetch('/api/scan-stats');
+            const data = await response.json();
+            allStats = data;
+            
+            // Update QR code select options
+            const select = document.getElementById('qrCodeSelect');
+            select.innerHTML = '<option value="all">All QR Codes</option>' +
+                data.qr_stats.map(qr => 
+                    `<option value="${qr.id}">${qr.name}</option>`
+                ).join('');
+            
+            updateCharts('all');
+        }
+
+        function updateCharts(selectedQrId) {
+            if (!allStats) return;
+
+            // Filter data based on selected QR code
+            const filteredDailyScans = selectedQrId === 'all' 
+                ? allStats.daily_scans
+                : allStats.daily_scans.filter(scan => scan.qr_id === selectedQrId);
+
+            // Group daily scans by date
+            const dailyData = {};
+            filteredDailyScans.forEach(scan => {
+                if (!dailyData[scan.date]) {
+                    dailyData[scan.date] = 0;
+                }
+                dailyData[scan.date] += scan.count;
+            });
+
+            const dates = Object.keys(dailyData).sort();
+            const counts = dates.map(date => dailyData[date]);
+
+            // Update total scans
+            const totalScans = counts.reduce((a, b) => a + b, 0);
+            document.getElementById('totalScans').textContent = totalScans;
+
+            // Daily scans chart
+            const dailyScansData = [{
+                x: dates,
+                y: counts,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Daily Scans'
+            }];
+
+            Plotly.newPlot('dailyScansChart', dailyScansData, {
+                title: 'Daily QR Code Scans',
+                xaxis: { title: 'Date' },
+                yaxis: { title: 'Number of Scans' }
+            });
+
+            // Device distribution chart
+            const deviceData = {
+                labels: allStats.device_stats.map(d => d.device),
+                datasets: [{
+                    data: allStats.device_stats.map(d => d.count),
+                    backgroundColor: ['#4F46E5', '#10B981']
+                }]
+            };
+
+            new Chart(document.getElementById('deviceChart'), {
+                type: 'pie',
+                data: deviceData,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Update QR code table
+            const tableBody = document.getElementById('qrCodeTableBody');
+            tableBody.innerHTML = allStats.qr_stats.map(qr => `
+                <tr class="border-t">
+                    <td class="px-6 py-4 whitespace-nowrap">${qr.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${qr.scan_count}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${new Date(qr.created_at).toLocaleDateString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        ${qr.last_scan ? new Date(qr.last_scan).toLocaleDateString() : 'No scans yet'}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Fetch and update Telegram statistics
+        async function updateTelegramStats() {
+            const response = await fetch('/api/telegram-stats');
+            const data = await response.json();
+            
+            if (data.error) {
+                document.getElementById('channelStats').innerHTML = 
+                    `<div class="text-red-500">Error: ${data.error}</div>`;
+                return;
+            }
+
+            document.getElementById('channelName').textContent = data.channel_name;
+            document.getElementById('subscribers').textContent = data.subscribers;
+
+            // Update message stats
+            const messageStatsHtml = data.messages.slice(0, 5).map(msg => `
+                <div class="bg-gray-50 p-3 rounded">
+                    <div class="text-sm text-gray-600">
+                        ${new Date(msg.date).toLocaleDateString()}
+                    </div>
+                    <div class="flex justify-between mt-1">
+                        <span>Views: ${msg.views}</span>
+                        <span>Forwards: ${msg.forwards}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('messageStats').innerHTML = messageStatsHtml;
+        }
+
+        // Update stats every 5 minutes
+        updateScanStats();
+        updateTelegramStats();
+        setInterval(() => {
+            updateScanStats();
+            updateTelegramStats();
+        }, 300000);
+
+        // Handle QR code selection change
+        document.getElementById('qrCodeSelect').addEventListener('change', function() {
+            updateCharts(this.value);
+        });
+    </script>
+</body>
+</html> 

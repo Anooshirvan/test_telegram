@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">QR Code Manager</h1>
+            <a href="/dashboard" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">View Analytics</a>
+        </div>
+
+        <!-- Create New QR Code -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-xl font-semibold mb-4">Create New QR Code</h2>
+            <div class="flex gap-4">
+                <input type="text" id="qrName" placeholder="QR Code Name" 
+                       class="flex-1 p-2 border rounded">
+                <button onclick="createQRCode()" 
+                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Generate QR Code
+                </button>
+            </div>
+        </div>
+
+        <!-- QR Codes List -->
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">Your QR Codes</h2>
+            <div id="qrCodesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate a random ID for QR codes
+        function generateId() {
+            return Math.random().toString(36).substring(2, 15);
+        }
+
+        // Create a new QR code
+        async function createQRCode() {
+            const name = document.getElementById('qrName').value;
+            if (!name) {
+                alert('Please enter a name for the QR code');
+                return;
+            }
+
+            const response = await fetch('/api/qr-codes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    id: generateId(),
+                    name: name
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                document.getElementById('qrName').value = '';
+                loadQRCodes();
+            }
+        }
+
+        // Load all QR codes
+        async function loadQRCodes() {
+            const response = await fetch('/api/qr-codes');
+            const qrCodes = await response.json();
+            
+            const qrCodesList = document.getElementById('qrCodesList');
+            qrCodesList.innerHTML = qrCodes.map(qr => `
+                <div class="border rounded-lg p-4">
+                    <h3 class="font-semibold mb-2">${qr.name}</h3>
+                    <div class="flex justify-center mb-4">
+                        <div id="qr-${qr.id}"></div>
+                    </div>
+                    <div class="text-sm text-gray-600 break-all">
+                        URL: ${window.location.origin}/qr/${qr.id}
+                    </div>
+                    <div class="text-sm text-gray-500 mt-2">
+                        Created: ${new Date(qr.created_at).toLocaleDateString()}
+                    </div>
+                </div>
+            `).join('');
+
+            // Generate QR codes
+            qrCodes.forEach(qr => {
+                QRCode.toCanvas(document.getElementById(`qr-${qr.id}`), 
+                    `${window.location.origin}/qr/${qr.id}`, {
+                    width: 200,
+                    margin: 1,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                });
+            });
+        }
+
+        // Load QR codes on page load
+        loadQRCodes();
+    </script>
+</body>
+</html> 
